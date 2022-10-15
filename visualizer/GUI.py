@@ -11,12 +11,33 @@ class Graph:
     def __init__(self, width, height):
         self.w = width
         self.h = height
+        self.font = cv2.FONT_HERSHEY_SIMPLEX
+        self.color_text = GRAPH["text"]
+        self.thickness = 2
+        self.font_scale = 1
+
 
     @lru_cache
     def resize(self, ratio):
         return int(self.w * ratio[0]), int(self.h * ratio[1])
 
-    def plot(self, data, ratio):
+    def put_text(self, canvas, text, left_w, bottom_text):
+        cv2.putText(canvas, text, (left_w, bottom_text), self.font,
+                    self.font_scale, self.color_text, self.thickness, cv2.LINE_AA)
+
+    def sub_plot(self, canvas, ratio):
+        w, h = self.resize(ratio)
+        sub_h, sub_w, _ = canvas.shape
+        sub_ratio = 0.15
+        text_box_size = 4
+        pad = min(sub_w * sub_ratio, sub_h * sub_ratio)
+        sub_w, sub_h = int(sub_w - pad), int(sub_h - pad)
+        pad_w, pad_h = (w - sub_w) // 2, (h - sub_h) // 2
+        sub_h -= pad_h * (text_box_size - 1)
+        sub_canvas = np.zeros((sub_h, sub_w, 3))
+        return sub_canvas, sub_w, sub_h, pad_w, pad_h, text_box_size
+
+    def plot(self, data, ratio, *args):
         w, h = self.resize(ratio)
         canvas = np.zeros((h, w, 3), dtype=np.uint8)
         return canvas
@@ -34,21 +55,25 @@ class GraphClasses(Graph):
 
     def plot(self, data, ratio):
         canvas = super(GraphClasses, self).plot(data, ratio)
-        canvas += 50
+        sub_canvas, sub_w, sub_h, pad_w, pad_h, text_box_size = self.sub_plot(canvas, ratio)
+        sub_canvas += GRAY
         w, h = self.resize(ratio)
         step_w = w // len(data)
-        bottom_text = int(h * 0.9)
-        bottom_bar = int(h * 0.8)
-        top_bar = int(h * 0.7)
+        bottom_text = int(sub_h * 0.95)
+        bottom_bar = int(sub_h * 0.8)
+        top_bar = int(sub_h * 0.75)
         offset_w = step_w // 2
         for i in range(len(data)):
             left_w = int(step_w * i + offset_w)
-            cv2.putText(canvas, f"{i+1}", (left_w, bottom_text), self.font,
-                        self.font_scale, self.color_text, self.thickness, cv2.LINE_AA)
+            self.put_text(sub_canvas, f"{i+1}", left_w, bottom_text)
             class_rate = int(bottom_bar - top_bar * data[i])
-            cv2.rectangle(canvas, (left_w, bottom_bar), (left_w + offset_w // 2, class_rate), self.color_rect, -1)
-            cv2.rectangle(canvas, (left_w, bottom_bar), (left_w + offset_w // 2, int(bottom_bar - top_bar)),
+            cv2.rectangle(sub_canvas, (left_w, bottom_bar), (left_w + offset_w // 2, class_rate), self.color_rect, -1)
+            cv2.rectangle(sub_canvas, (left_w, bottom_bar), (left_w + offset_w // 2, int(bottom_bar - top_bar)),
                           self.color_square, self.thickness)
+
+        # union subcanvas and canvas
+        canvas[pad_h:h - pad_h * text_box_size, pad_w:w - pad_w] = sub_canvas
+
         return canvas
 
 
@@ -65,18 +90,11 @@ class GraphContinuous(Graph):
         self.max_h = GRAPH_CONTINUOUS["max"]
         self.min_h = GRAPH_CONTINUOUS["min"]
 
-    def plot(self, x, ratio):
+    def plot(self, x, ratio, name):
         # prepare canvas and subcanvas
         canvas = super(GraphContinuous, self).plot(x, ratio)
+        sub_canvas, sub_w, sub_h, pad_w, pad_h, text_box_size = self.sub_plot(canvas, ratio)
         w, h = self.resize(ratio)
-        sub_h, sub_w, _ = canvas.shape
-        sub_ratio = 0.15
-        text_box_size = 4
-        pad = min(sub_w * sub_ratio, sub_h * sub_ratio)
-        sub_w, sub_h = int(sub_w - pad), int(sub_h - pad)
-        pad_w, pad_h = (w - sub_w) // 2, (h - sub_h) // 2
-        sub_h -= pad_h * (text_box_size - 1)
-        sub_canvas = np.zeros((sub_h, sub_w, 3)) + 50
 
         # update data
         self.data.append(x)
@@ -86,8 +104,10 @@ class GraphContinuous(Graph):
         # plot graph
         absis = sub_h // 2
         data = np.array(self.data)
-        max_y = max(data.max(), self.max_h)
-        min_y = min(data.min(), self.min_h)
+        data_max = data.max()
+        data_min = data.min()
+        max_y = max(data_max, self.max_h)
+        min_y = min(data_min, self.min_h)
         graph_ratio = sub_h / (max_y - min_y)
         data = max_y - data
         data = data * graph_ratio
@@ -107,9 +127,19 @@ class GraphContinuous(Graph):
         # union subcanvas and canvas
         canvas[pad_h:h - pad_h * text_box_size, pad_w:w - pad_w] = sub_canvas
 
+        # statistic
+        bottom_text = int(h * 0.8)
+        left_w = int(w * 0.1)
+        self.put_text(canvas, name, left_w, bottom_text)
+        self.put_text(canvas, f"Current={round(self.data[-1], 4)}", left_w, int(h * 0.9))
+        self.put_text(canvas, f"Max={round(data_max, 4)}", int(left_w * 6), bottom_text)
+        self.put_text(canvas, f"Min={round(data_min, 4)}", left_w * 6, int(h * 0.9))
+
         return canvas
 
+
 counter = 0
+x = np.linspace(0, 500, 10000)
 class GUI:
     def __init__(self, path, size):
         self.path = path
@@ -131,16 +161,18 @@ class GUI:
     def view(self, frame):
         classes = self.graph_classes.plot(np.random.random(7), (0.5, 0.5))
         plain_plot = self.graph.plot([], (0.5, 0.5))
-        x = np.linspace(0, 20, 1000)
-        global counter
+
+        global counter, x
         y = np.sin(x[counter])
         counter += 1
-        continuous_plot = self.graph_continuous.plot(y, (0.5, 0.5))
+        continuous_plot = self.graph_continuous.plot(y, (0.5, 0.5), "Class 1")
 
         frame = np.concatenate(
-            (frame, np.concatenate((classes, continuous_plot), axis=0)),
-            axis=1
+            (frame, np.concatenate((classes, continuous_plot), axis=1)),
+            axis=0
         )
+
+        # frame = np.concatenate()
 
         w, h = self.resized_width_height(frame.shape)
         frame = cv2.resize(frame, (w, h))

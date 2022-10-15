@@ -1,3 +1,7 @@
+GRAPH = {
+    "text": (144, 0, 255),
+}
+
 GRAPH_CLASSES = {
     "text": (144, 0, 255),
     "square": (144, 0, 255),
@@ -13,3 +17,4 @@ GRAPH_CONTINUOUS = {
 }
 
 WHITE = (255, 255, 255)
+GRAY = (50, 50, 50)
