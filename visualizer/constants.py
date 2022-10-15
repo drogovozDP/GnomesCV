@@ -1,3 +1,8 @@
+WHITE = (220, 220, 220)
+GRAY = (50, 50, 50)
+RED = (0, 0, 220)
+BLUE = (200, 0, 0)
+
 GRAPH = {
     "text": (144, 0, 255),
 }
@@ -16,5 +21,8 @@ GRAPH_CONTINUOUS = {
     "min": -1,
 }
 
-WHITE = (255, 255, 255)
-GRAY = (50, 50, 50)
+GRAPH_HIST = {
+    "graph": (200, 0, 0),
+    "text": WHITE,
+    "rect": BLUE,
+}
