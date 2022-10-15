@@ -205,6 +205,7 @@ class GUI:
         self.running = True
         width, height = int(self.cap.get(3)), int(self.cap.get(4))
         self.size = size
+        self.out = None
 
         self.graph = Graph(width, height)
         self.graph_classes = GraphClasses(width, height)
@@ -227,6 +228,7 @@ class GUI:
         classes = self.graph_classes.plot(np.random.random(7), (0.5, 0.5))
         plain_plot = self.graph.plot([], (0.5, 0.5))
 
+        # here we will predict frame and calculate all stuff
         global counter, x
         cur_x = x[counter]
         counter += 1
@@ -260,6 +262,7 @@ class GUI:
         w, h = self.resized_width_height(frame.shape)
         frame = cv2.resize(frame, (w, h))
         cv2.imshow('graphs', frame)
+        self.out.write(frame) if self.out is not None else None
 
     def controller(self):
         if cv2.waitKey(25) & 0xFF == ord('q'):
@@ -268,7 +271,10 @@ class GUI:
     def switch_off(self):
         self.running = False
 
-    def run(self):
+    def run(self, save_video):
+        if save_video:
+            self.out = cv2.VideoWriter('output.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 10,
+                                  (1536, 864))
         assert self.cap.isOpened(), "Video is not opened"
         while self.running:
             start_time = time.time()
